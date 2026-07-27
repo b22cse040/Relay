@@ -19,7 +19,6 @@ namespace DownloadManager.Models
         {
             ID = id;
             URI = uri;
-            
             DateTime startTime = DateTime.Now;
             StartTime = startTime;
             FilePath = filePath;
