@@ -84,6 +84,48 @@ namespace DownloadManager.Models
             }
         }
 
+        /// <summary>
+        /// Destroys only the context and not the downloads lol xD
+        /// </summary>
+        public void ResetLogs()
+        {
+            // Try deleting log file
+            try
+            {
+                File.Delete(_LogFilePath);
+                if (Visibility >= 2)
+                {
+                    Console.WriteLine($"Log File at {_LogFilePath} deleted successfully.");
+                }
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"[ERROR]: File is in use or locked! {ex.Message}");
+            }
+            catch(UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"{ex.Message}");
+            }
+
+            // try deleting Metadata File
+            try
+            {
+                File.Delete(_MetadataFilePath);
+                if (Visibility >= 2)
+                {
+                    Console.WriteLine($"Log File at {_MetadataFilePath} deleted successfully.");
+                }
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"[ERROR]: File is in use or locked! {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"{ex.Message}");
+            }
+        }
+
         private DownloadItem CreateDownloadItem(
             Uri uri,
             string LocalPathDir,
@@ -196,21 +238,31 @@ namespace DownloadManager.Models
                     fileName: fileName,
                     contentType: contentType);
 
+                // Using buffer to track totalBytesDownloaded in case ContentLength is null 
+                // on the HTTP Header
+                const int BufferSize = 8192;
+                byte[] buffer = new byte[BufferSize];
+
+                long totalBytesDownloaded = 0;
+                int bytesRead = 0;
+ 
                 using FileStream fileStream = new(
                     item.FilePath,
                     FileMode.Create,
                     FileAccess.Write);
 
-                await networkStream.CopyToAsync(fileStream);
+                // await networkStream.CopyToAsync(fileStream);
+                while((bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer, 0, bytesRead);
+                    totalBytesDownloaded += bytesRead;
+                }
 
                 item.EndTime = DateTime.Now;
-                item.Size = contentLength;
+                item.Size = contentLength ?? totalBytesDownloaded;
 
-                if (Visibility >= 2)
-                {
-                    Console.WriteLine(
-                        $"Download complete in {(item.EndTime - item.StartTime)?.TotalSeconds:F2} seconds.");
-                }
+                Console.WriteLine(
+                        $"Download for {Path.GetFileName(item.FilePath)} complete in {(item.EndTime - item.StartTime)?.TotalSeconds:F2} seconds.");
             }
 
             if (item != null)
