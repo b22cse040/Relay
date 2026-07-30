@@ -8,7 +8,7 @@ using System.Text.Json;
 namespace DownloadManager.Models
 {
 
-    internal class DownloadManagerContext
+    internal class DownloadManagerService
     {
         private DownloadManagerLogger _Logger {  get; set; }
         public int Visibility { get; set; }
@@ -22,7 +22,7 @@ namespace DownloadManager.Models
             ".jpeg"
         };
 
-        public DownloadManagerContext(string? LogFilePath, int visibility = 1, bool logPretty = false)
+        public DownloadManagerService(string? LogFilePath, int visibility = 1, bool logPretty = false)
         {
             Visibility = visibility;
             string logFilePath = LogFilePath ?? string.Empty;

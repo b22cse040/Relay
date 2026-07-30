@@ -63,6 +63,55 @@ namespace DownloadManager.Models
                 }
             }
 
+            else
+            {
+                _LogPretty = logPretty;
+
+                _LogFilePath = logFilePath;
+
+                string? logDir = Path.GetDirectoryName(_LogFilePath);
+
+                if (string.IsNullOrEmpty(logDir))
+                {
+                    logDir = Directory.GetCurrentDirectory();
+                }
+
+                if (!Directory.Exists(logDir))
+                {
+                    Directory.CreateDirectory(logDir);
+
+                    if (_Visibility >= 2)
+                    {
+                        Console.WriteLine($"Logging File Directory created at {logDir}");
+                    }
+                }
+
+                if (!File.Exists(_LogFilePath))
+                {
+                    using (File.Create(_LogFilePath)) { }
+
+                    if (_Visibility >= 2)
+                    {
+                        Console.WriteLine($"Logging File Created at {_LogFilePath}");
+                    }
+                }
+
+                _MetaDataFilePath = Path.Combine(logDir, "DownloadManagerContextMetaData.json");
+
+                if (!File.Exists(_MetaDataFilePath))
+                {
+                    using (File.Create(_MetaDataFilePath)) { }
+
+                    if (_Visibility >= 2)
+                    {
+                        Console.WriteLine($"Metadata File Created at: {_MetaDataFilePath}");
+                    }
+
+                    DownloadManagerMetaData metadata = new();
+                    UpdateMetaData(metadata);
+                }
+            }
+
         }
 
         /// <summary>
