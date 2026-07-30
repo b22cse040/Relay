@@ -7,23 +7,11 @@ using System.Text.Json;
 
 namespace DownloadManager.Models
 {
-    internal class DownloadManagerMetadata
-    {
-        public int ID { get; set; }
-
-        public DownloadManagerMetadata()
-        {
-            ID = 0;
-        }
-    }
 
     internal class DownloadManagerContext
     {
-        private string _LogFilePath { get; set; }
-        private string _MetadataFilePath { get; set; }
+        private DownloadManagerLogger _Logger {  get; set; }
         public int Visibility { get; set; }
-
-        private bool _LogPretty { get; set; }
 
         private readonly List<string> _extensions = new()
         {
@@ -37,93 +25,9 @@ namespace DownloadManager.Models
         public DownloadManagerContext(string? LogFilePath, int visibility = 1, bool logPretty = false)
         {
             Visibility = visibility;
-
-            string RootDir = Directory.GetParent(Directory.GetCurrentDirectory())!.Parent!.Parent!.FullName;
-
-            string LogDir = Path.Combine(RootDir, "Logs");
-
-            if (!Directory.Exists(LogDir))
-            {
-                Directory.CreateDirectory(LogDir);
-
-                if (Visibility >= 2)
-                    Console.WriteLine($"Logging File Directory created at: {LogDir}");
-            }
-
-            string currLogFile = Path.Combine(LogDir, "logs.jsonl");
-            _LogFilePath = LogFilePath ?? currLogFile;
-            _LogPretty = logPretty;
-
-            if (!File.Exists(_LogFilePath))
-            {
-                using (File.Create(_LogFilePath)) { }
-
-                if (Visibility >= 2)
-                    Console.WriteLine($"Logging File created at: {_LogFilePath}");
-            }
-
-            _MetadataFilePath = Path.Combine(LogDir, "DownloadManagerContextMetaData.json");
-
-            if (!File.Exists(_MetadataFilePath))
-            {
-                using (File.Create(_MetadataFilePath)) { }
-
-                if (Visibility >= 2)
-                    Console.WriteLine($"Metadata File created at: {_MetadataFilePath}");
-
-                DownloadManagerMetadata metadata = new();
-
-                string json = JsonSerializer.Serialize(
-                    metadata,
-                    new JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    });
-
-                File.WriteAllText(_MetadataFilePath, json);
-            }
-        }
-
-        /// <summary>
-        /// Destroys only the context and not the downloads lol xD
-        /// </summary>
-        public void ResetLogs()
-        {
-            // Try deleting log file
-            try
-            {
-                File.Delete(_LogFilePath);
-                if (Visibility >= 2)
-                {
-                    Console.WriteLine($"Log File at {_LogFilePath} deleted successfully.");
-                }
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"[ERROR]: File is in use or locked! {ex.Message}");
-            }
-            catch(UnauthorizedAccessException ex)
-            {
-                Console.WriteLine($"{ex.Message}");
-            }
-
-            // try deleting Metadata File
-            try
-            {
-                File.Delete(_MetadataFilePath);
-                if (Visibility >= 2)
-                {
-                    Console.WriteLine($"Log File at {_MetadataFilePath} deleted successfully.");
-                }
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"[ERROR]: File is in use or locked! {ex.Message}");
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                Console.WriteLine($"{ex.Message}");
-            }
+            string logFilePath = LogFilePath ?? string.Empty;
+            _Logger = new DownloadManagerLogger(logFilePath: logFilePath, visibility: visibility, logPretty: logPretty); ; 
+            
         }
 
         private DownloadItem CreateDownloadItem(
@@ -145,10 +49,7 @@ namespace DownloadManager.Models
             string FullFileName = FileName + FileExtension;
             string FilePath = Path.Combine(LocalPathDir, FullFileName);
 
-            string metadataJson = File.ReadAllText(_MetadataFilePath);
-
-            DownloadManagerMetadata metadata =
-                JsonSerializer.Deserialize<DownloadManagerMetadata>(metadataJson)!;
+            DownloadManagerMetaData metadata = _Logger.GetMetaData();
 
             int nextID = metadata.ID;
 
@@ -160,14 +61,7 @@ namespace DownloadManager.Models
 
             metadata.ID++;
 
-            string updatedMetadata = JsonSerializer.Serialize(
-                metadata,
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-
-            File.WriteAllText(_MetadataFilePath, updatedMetadata);
+            _Logger.UpdateMetaData(metadata);
 
             return item;
         }
@@ -188,6 +82,11 @@ namespace DownloadManager.Models
             }
 
             return new string(hash);
+        }
+
+        public void ResetLogs()
+        {
+            _Logger.ResetLogs();
         }
 
         public async Task DownloadTheItem(
@@ -267,33 +166,7 @@ namespace DownloadManager.Models
 
             if (item != null)
             {
-                LogDownloadedItem(item, Mode.ToLower());
-            }
-        }
-
-        private void LogDownloadedItem(DownloadItem item, string mode)
-        {
-            if (!File.Exists(_LogFilePath))
-            {
-                throw new FileNotFoundException("Log File does not exist!");
-            }
-
-            string jsonItem = JsonSerializer.Serialize(
-                new
-                {
-                    Mode = mode,
-                    Item = item
-                },
-                new JsonSerializerOptions
-                {
-                    WriteIndented = _LogPretty
-                });
-
-            File.AppendAllText(_LogFilePath, jsonItem + Environment.NewLine);
-
-            if (Visibility >= 2)
-            {
-                Console.WriteLine("Logged downloading action to Log File.");
+                _Logger.LogDownloadedItem(item, Mode.ToLower());
             }
         }
     }
