@@ -15,4 +15,4 @@ Thumbs.db
 .DS_Store
 
 # Models Documentation
-Models/Architecture-Design.md
+DownloadManager/Models/Architecture-Design.md
