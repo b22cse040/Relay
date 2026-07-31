@@ -112,6 +112,11 @@ namespace DownloadManager.Models
                     uri : null
                 );
 
+                if(Visibility >= 2)
+                {
+                    Console.WriteLine("[ERROR] Invalid-URI");
+                }
+
                 _Logger.LogDownloadedItem(InvalidURIItem, Mode.ToLower(), InvalidURIErrorStr);
                 return;
             }
@@ -124,6 +129,11 @@ namespace DownloadManager.Models
                     error: HTTPErrorStr,
                     LocalPathDir: LocalPathDir, contentType: "Error-String"
                     );
+                if(Visibility >= 2)
+                {
+                    Console.WriteLine("[ERROR] URI entered does not use HTTP or HTTPS.");
+                }
+
                 _Logger.LogDownloadedItem(item: errorItem, mode: Mode, error: HTTPErrorStr);
                 throw new Exception(HTTPErrorStr);
             }
