@@ -13,3 +13,6 @@ Logs/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Models Documentation
+Models/Architecture-Design.md
