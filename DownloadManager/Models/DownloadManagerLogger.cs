@@ -168,7 +168,7 @@ namespace DownloadManager.Models
             File.WriteAllText(_MetaDataFilePath, jsonMetaData);
         }
 
-        public void LogDownloadedItem(DownloadItem item, string mode)
+        public void LogDownloadedItem(DownloadItem item, string mode, string error)
         {
             if (!File.Exists(_LogFilePath))
             {
@@ -179,7 +179,8 @@ namespace DownloadManager.Models
                 new
                 {
                     Mode = mode,
-                    Item = item
+                    Item = item,
+                    Error = error
                 },
                 new JsonSerializerOptions
                 {

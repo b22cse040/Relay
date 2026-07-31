@@ -34,7 +34,9 @@ namespace DownloadManager.Models
             Uri uri,
             string LocalPathDir,
             string? fileName,
-            string contentType)
+            string contentType,
+            string? error
+            )
         {
             string FileName = fileName ?? createHashedFileName($"{LocalPathDir}{DateTime.Now}");
 
@@ -51,7 +53,7 @@ namespace DownloadManager.Models
 
             DownloadManagerMetaData metadata = _Logger.GetMetaData();
 
-            int nextID = metadata.ID;
+            int nextID = (string.IsNullOrEmpty(error)) ? metadata.ID : -1;
 
             DownloadItem item = new DownloadItem(
                 id: nextID,
@@ -59,7 +61,11 @@ namespace DownloadManager.Models
                 filePath: FilePath
             );
 
-            metadata.ID++;
+            // If error is empty or null then Item created successfully, so we can increase the next ID.
+            if(string.IsNullOrEmpty(error))
+            {
+                metadata.ID++;
+            }
 
             _Logger.UpdateMetaData(metadata);
 
@@ -90,83 +96,119 @@ namespace DownloadManager.Models
         }
 
         public async Task DownloadTheItem(
-            Uri uri,
+            string uriStr,
             string LocalPathDir,
             string? fileName,
             string Mode = "Async")
         {
-            if (uri.Scheme != "http" && uri.Scheme != "https")
+            if(!Uri.TryCreate(uriStr, UriKind.Absolute, out Uri? uri))
             {
-                throw new Exception("URI entered does not use HTTP or HTTPS.");
+                string InvalidURIErrorStr = "Invalid-URI";
+
+                DownloadItem InvalidURIItem = new DownloadItem
+                (
+                    id : -1,
+                    filePath : "",
+                    uri : null
+                );
+
+                _Logger.LogDownloadedItem(InvalidURIItem, Mode.ToLower(), InvalidURIErrorStr);
+                return;
+            }
+
+            if(uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) // (uri.Scheme != "http" && uri.Scheme != "https")
+            {
+                string HTTPErrorStr = "URI entered does not use HTTP or HTTPS.";
+                DownloadItem errorItem = CreateDownloadItem(
+                    uri: uri, fileName: fileName,
+                    error: HTTPErrorStr,
+                    LocalPathDir: LocalPathDir, contentType: "Error-String"
+                    );
+                _Logger.LogDownloadedItem(item: errorItem, mode: Mode, error: HTTPErrorStr);
+                throw new Exception(HTTPErrorStr);
             }
 
             DownloadItem? item = null;
 
-            if (Mode.Equals("async", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                if (Visibility >= 2)
-                    Console.WriteLine($"Starting download in {Mode} mode.");
-
-                using HttpClient httpClient = new();
-
-                using HttpResponseMessage response = await httpClient.GetAsync(
-                    uri,
-                    HttpCompletionOption.ResponseHeadersRead);
-
-                response.EnsureSuccessStatusCode();
-
-                string contentType =
-                    response.Content.Headers.ContentType?.MediaType
-                    ?? "application/octet-stream";
-
-                long? contentLength =
-                    response.Content.Headers.ContentLength;
-
-                if (Visibility >= 2)
+                if (Mode.Equals("async", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"Content-Type   : {contentType}");
-                    Console.WriteLine($"Content-Length : {contentLength ?? -1} bytes");
+                    if (Visibility >= 2)
+                        Console.WriteLine($"Starting download in {Mode} mode.");
+
+                    using HttpClient httpClient = new();
+
+                    using HttpResponseMessage response = await httpClient.GetAsync(
+                        uri,
+                        HttpCompletionOption.ResponseHeadersRead);
+
+                    response.EnsureSuccessStatusCode();
+
+                    string contentType =
+                        response.Content.Headers.ContentType?.MediaType
+                        ?? "application/octet-stream";
+
+                    long? contentLength =
+                        response.Content.Headers.ContentLength;
+
+                    if (Visibility >= 2)
+                    {
+                        Console.WriteLine($"Content-Type   : {contentType}");
+                        Console.WriteLine($"Content-Length : {contentLength ?? -1} bytes");
+                    }
+
+                    using Stream networkStream =
+                        await response.Content.ReadAsStreamAsync();
+
+                    item = CreateDownloadItem(
+                        uri: uri,
+                        LocalPathDir: LocalPathDir,
+                        fileName: fileName,
+                        contentType: contentType,
+                        error: String.Empty);
+
+                    // Using buffer to track totalBytesDownloaded in case ContentLength is null 
+                    // on the HTTP Header
+                    const int BufferSize = 8192;
+                    byte[] buffer = new byte[BufferSize];
+
+                    long totalBytesDownloaded = 0;
+                    int bytesRead = 0;
+
+                    using FileStream fileStream = new(
+                        item.FilePath,
+                        FileMode.Create,
+                        FileAccess.Write);
+
+                    // await networkStream.CopyToAsync(fileStream);
+                    while ((bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer, 0, bytesRead);
+                        totalBytesDownloaded += bytesRead;
+                    }
+
+                    item.EndTime = DateTime.Now;
+                    item.Size = contentLength ?? totalBytesDownloaded;
+
+                    Console.WriteLine(
+                            $"Download for {Path.GetFileName(item.FilePath)} complete in {(item.EndTime - item.StartTime)?.TotalSeconds:F2} seconds.");
+
+                    if(item != null)
+                    {
+                        _Logger.LogDownloadedItem(item, Mode.ToLower(), String.Empty);
+                    }
                 }
-
-                using Stream networkStream =
-                    await response.Content.ReadAsStreamAsync();
-
-                item = CreateDownloadItem(
-                    uri: uri,
-                    LocalPathDir: LocalPathDir,
-                    fileName: fileName,
-                    contentType: contentType);
-
-                // Using buffer to track totalBytesDownloaded in case ContentLength is null 
-                // on the HTTP Header
-                const int BufferSize = 8192;
-                byte[] buffer = new byte[BufferSize];
-
-                long totalBytesDownloaded = 0;
-                int bytesRead = 0;
- 
-                using FileStream fileStream = new(
-                    item.FilePath,
-                    FileMode.Create,
-                    FileAccess.Write);
-
-                // await networkStream.CopyToAsync(fileStream);
-                while((bytesRead = await networkStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                {
-                    await fileStream.WriteAsync(buffer, 0, bytesRead);
-                    totalBytesDownloaded += bytesRead;
-                }
-
-                item.EndTime = DateTime.Now;
-                item.Size = contentLength ?? totalBytesDownloaded;
-
-                Console.WriteLine(
-                        $"Download for {Path.GetFileName(item.FilePath)} complete in {(item.EndTime - item.StartTime)?.TotalSeconds:F2} seconds.");
             }
 
-            if (item != null)
+            catch (Exception ex)
             {
-                _Logger.LogDownloadedItem(item, Mode.ToLower());
+                _Logger.LogDownloadedItem(item, Mode.ToLower(), Convert.ToString(ex));
+                if(Visibility >= 2)
+                {
+                    Console.WriteLine($"[ERROR] {Convert.ToString(ex)}");
+                }
+                throw;
             }
         }
     }
