@@ -126,7 +126,7 @@ namespace DownloadManager.Models
                     last = ex;
                 }
 
-                if (attempt == retries)
+                if (attempt == retries - 1)
                     break;
 
                 double wait = GetNextRetryDelay(attempt + 1, jitter);
